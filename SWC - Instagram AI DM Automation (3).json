@@ -1,0 +1,1206 @@
+{
+  "name": "SWC - Instagram AI DM Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "swc-instagram-dm",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1184,
+        320
+      ],
+      "id": "3022b345-503e-447b-ba51-25936d11cd2f",
+      "name": "Webhook",
+      "webhookId": "98c06cff-0e63-4778-93f1-5ea752c5908e"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const body = item.json.body || {};\n  const entries = body.entry || [];\n\n  if (body.object !== 'instagram') {\n    results.push({\n      json: {\n        ignored: true,\n        reason: 'Not an Instagram event'\n      }\n    });\n    continue;\n  }\n\n  for (const entry of entries) {\n    const businessId = entry.id;\n    const events = entry.messaging || [];\n\n    for (const event of events) {\n      const senderId = event.sender?.id;\n      const recipientId = event.recipient?.id;\n      const messageId = event.message?.mid;\n      const timestamp = event.timestamp;\n\n      if (!event.message) {\n        results.push({\n          json: {\n            ignored: true,\n            reason: 'Non-message event'\n          }\n        });\n        continue;\n      }\n\n      if (senderId === businessId) {\n        results.push({\n          json: {\n            ignored: true,\n            reason: 'Business account own message'\n          }\n        });\n        continue;\n      }\n\n      const missingFields = [];\n\n      if (!senderId) missingFields.push('sender_id');\n      if (!recipientId) missingFields.push('recipient_id');\n      if (!messageId) missingFields.push('message_id');\n      if (!timestamp) missingFields.push('timestamp');\n\n      if (missingFields.length > 0) {\n        results.push({\n          json: {\n            ignored: false,\n            is_valid: false,\n            reason: 'Missing required fields',\n            missing_fields: missingFields\n          }\n        });\n        continue;\n      }\n\n      const text = event.message.text || '';\n      const hasAttachments = Array.isArray(event.message.attachments)\n        && event.message.attachments.length > 0;\n\n      // Ignore unsupported attachments and empty messages.\n      if (!text.trim()) {\n        results.push({\n          json: {\n            ignored: true,\n            is_valid: false,\n            sender_id: senderId,\n            message_id: messageId,\n            reason: hasAttachments\n              ? 'Unsupported attachment'\n              : 'Empty message',\n            message_type: hasAttachments ? 'attachment' : 'unsupported'\n          }\n        });\n        continue;\n      }\n\n      results.push({\n        json: {\n          ignored: false,\n          is_valid: true,\n          sender_id: senderId,\n          recipient_id: recipientId,\n          business_account_id: businessId,\n          message_id: messageId,\n          timestamp: timestamp,\n          message_text: text,\n          message_type: 'text',\n          unsupported_attachment: false\n        }\n      });\n    }\n  }\n}\n\nreturn results;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        208
+      ],
+      "id": "1dc21f14-f921-4e0b-8454-8aa0828f98fb",
+      "name": "Validate Incoming Message"
+    },
+    {
+      "parameters": {
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "value": "N6GfwohkJi9MnsdJ",
+          "mode": "list",
+          "cachedResultName": "instagram_processed_messages",
+          "cachedResultUrl": "/projects/EIbc0hbWjyNzhCTf/datatables/N6GfwohkJi9MnsdJ"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "keyValue": "={{ $json.message_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -400,
+        416
+      ],
+      "id": "d6c8a89a-e61f-4cd6-a0e1-7027d9f58eba",
+      "name": "If row does not exist",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "N6GfwohkJi9MnsdJ",
+          "mode": "list",
+          "cachedResultName": "instagram_processed_messages",
+          "cachedResultUrl": "/projects/EIbc0hbWjyNzhCTf/datatables/N6GfwohkJi9MnsdJ"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $('Validate Incoming Message').item.json.message_id }}",
+            "sender_id": "={{ $('Validate Incoming Message').item.json.sender_id }}",
+            "processed_at": "={{ $now.toISO() }}",
+            "processing_status": "=Pending"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sender_id",
+              "displayName": "sender_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -208,
+        176
+      ],
+      "id": "412dafbf-2c89-493e-bc6e-aa2d22d579de",
+      "name": "Insert row"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "KRWs2JE4Sh2efrs6",
+          "mode": "list",
+          "cachedResultName": "instagram_conversation_memory",
+          "cachedResultUrl": "/projects/EIbc0hbWjyNzhCTf/datatables/KRWs2JE4Sh2efrs6"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "sender_id",
+              "keyValue": "={{ $json.sender_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -16,
+        352
+      ],
+      "id": "b89dc3a6-7d42-41b9-8881-131ecaa2f110",
+      "name": "Retrieve Conversation Memory",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.5-flash-lite",
+          "mode": "list",
+          "cachedResultName": "models/gemini-3.5-flash-lite"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are the SWC Instagram Sales Assistant for Selling With Confidence (SWC).\n\nYour job is to answer Instagram customer messages in a friendly, helpful, beginner-friendly tone.\n\nRULES:\n1. Use only the approved SWC knowledge base provided to you.\n2. Never invent SWC details, prices, inclusions, payment methods, refund policies, or enrollment procedures.\n3. Never promise earnings or guaranteed results.\n4. Never fabricate testimonials or personal experiences.\n5. Respond in Taglish or English based on the customer's language.\n6. Ask clarifying questions when the customer's request is unclear.\n7. Escalate questions that are outside the knowledge base or require human assistance.\n8. Never claim that a customer has enrolled or paid without verified confirmation.\n9. Keep replies natural and suitable for Instagram DMs.\n\nReturn valid JSON only, with these exact keys:\n{\n  \"reply_message\": \"Your response to the customer\",\n  \"customer_intent\": \"General Inquiry, SWC Information Inquiry, Pricing Inquiry, Interested Prospect, Enrollment Inquiry, or Needs Human Assistance\",\n  \"interest_level\": \"Low, Medium, or High\",\n  \"handoff_required\": false,\n  \"handoff_reason\": \"\"\n}\n\nIf human assistance is required, set handoff_required to true and explain why in handoff_reason.\nDo not include Markdown or text outside the JSON."
+            },
+            {
+              "content": "=Customer Instagram message:\n{{ $('Validate Incoming Message').item.json.message_text }}\n\nCustomer ID:\n{{ $('Validate Incoming Message').item.json.sender_id }}\n\nPrevious conversation history:\n{{ $json.conversation_history || \"No previous conversation.\" }}\n\nCustomer's previous intent:\n{{ $json.customer_intent || \"Not yet classified.\" }}\n\nCurrent human handoff status:\n{{ $json.handoff_status || \"Not Assigned\" }}\n\nIMPORTANT MEMORY INSTRUCTIONS:\n- If previous conversation history exists, read it carefully before responding.\n- Remember what the customer previously asked and what the assistant already explained.\n- Continue the conversation naturally using the previous context.\n- Do not ask the customer to repeat information that is already available in the conversation history.\n- If the customer asks whether you remember them or what you discussed, briefly acknowledge the previous topic and continue from there.\n- Only ask for clarification if the previous history does not contain enough information.\n\nIMPORTANT HUMAN HANDOFF AND RESUME INSTRUCTIONS:\n- Check the current human handoff status before deciding whether to escalate.\n- If handoff_status is \"Assigned\", the conversation is currently assigned to human assistance. Do not generate a normal automated sales reply.\n- If handoff_status is \"Not Assigned\", treat the previous human handoff as cleared and allow the AI assistant to continue helping the customer.\n- Do not trigger another handoff only because the conversation history mentions an earlier request to speak with a human.\n- Evaluate the customer's CURRENT message to determine whether a new handoff is necessary.\n- If the customer asks to speak with a human again, or their current question requires human assistance, set handoff_required to true.\n- If the customer has no new issue requiring human assistance, respond normally using the approved SWC knowledge base.\n- Never ignore a new request for human assistance.\n\nAPPROVED SWC KNOWLEDGE BASE:\n\nPROGRAM:\nSelling With Confidence (SWC 2.0) is an online business education program. It covers topics including social media, sales, marketing, user-generated content (UGC), dropshipping, and print-on-demand.\n\nWHO IS IT FOR?\nIt is beginner-friendly and intended for people who want to learn about online business and digital marketing. Do not promise that beginners will earn money or achieve guaranteed results.\n\nPRICING:\nA promotional page has displayed a price of $596. However, the current price has not been verified. If asked about the price, explain that $596 has appeared on a promotional page, but the customer should confirm the latest price with the SWC team.\n\nFREE COMMUNITY:\nThe SWC Skool community is described as free to join. Do not imply that paid program materials or the full SWC 2.0 program are free.\n\nENROLLMENT:\nOfficial SWC community:\nhttps://www.skool.com/swcthelevelup/about\n\nPromotional website:\nhttps://swcsellingwithconfidence.com/\n\nDo not invent enrollment steps, payment instructions, or access procedures. Refer customers to the official SWC team for confirmation.\n\nFREQUENTLY ASKED QUESTIONS:\n- Is SWC beginner-friendly? Yes, the program is described as beginner-friendly.\n- Will I earn money? Earnings are not guaranteed. Results depend on individual effort and circumstances.\n- What does SWC teach? Topics include social media, sales, marketing, UGC, dropshipping, and print-on-demand.\n- How much does it cost? The promotional page has displayed $596, but the current price must be confirmed.\n- Is the community free? The Skool community is described as free. This does not mean the paid program is free.\n- What payment methods are accepted? Not verified. Refer the customer to the SWC team.\n- Is there a refund policy? Do not invent or promise refund terms. Refer the customer to the SWC team.\n- What exactly is included? Exact inclusions and curriculum details must be confirmed.\n- Can I enroll now? Direct the customer to the official SWC website or team for current enrollment instructions.\n\nHUMAN HANDOFF:\nEscalate questions about refunds, payment problems, enrollment or account access issues, affiliate commissions or payouts, complaints, and any information not confirmed in this knowledge base.\n\nNever request passwords, full payment card numbers, or security codes.\n\nIMPORTANT:\nUse only the information above. If a detail is not confirmed, say so politely and offer to connect the customer with the SWC team. Never invent prices, policies, program features, testimonials, or income claims.\n\nRESPONSE FORMAT:\nReturn valid JSON only, with these exact keys:\n{\n  \"reply_message\": \"Your response to the customer\",\n  \"customer_intent\": \"General Inquiry, SWC Information Inquiry, Pricing Inquiry, Interested Prospect, Enrollment Inquiry, or Needs Human Assistance\",\n  \"interest_level\": \"Low, Medium, or High\",\n  \"handoff_required\": false,\n  \"handoff_reason\": \"\"\n}\n\nIf human assistance is required, set handoff_required to true and explain why in handoff_reason.\n\nDo not include Markdown or text outside the JSON."
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        272,
+        288
+      ],
+      "id": "026f6397-f689-4e06-98e9-d8e3407f9a7e",
+      "name": "Message a model1",
+      "retryOnFail": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "qNrdMrYJgEzvE0xX",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const input = $input.item.json;\n\n// Find the AI response text\nconst possibleResponses = [\n  input.content?.parts?.map(p => p.text || '').join(''),\n  input.candidates?.[0]?.content?.parts?.map(p => p.text || '').join(''),\n  input.text,\n  input.output,\n  input.response,\n  input.message?.content\n];\n\nlet rawText = possibleResponses.find(\n  value => typeof value === 'string' && value.trim()\n);\n\nlet result;\n\ntry {\n  if (input.reply_message && input.customer_intent) {\n    result = input;\n  } else {\n    if (!rawText) {\n      throw new Error('No AI response found');\n    }\n\n    rawText = rawText\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n\n    const start = rawText.indexOf('{');\n    const end = rawText.lastIndexOf('}');\n\n    if (start === -1 || end === -1) {\n      throw new Error('Invalid JSON response');\n    }\n\n    result = JSON.parse(rawText.slice(start, end + 1));\n  }\n\n  const allowedIntents = [\n    'General Inquiry',\n    'SWC Information Inquiry',\n    'Pricing Inquiry',\n    'Interested Prospect',\n    'Enrollment Inquiry',\n    'Needs Human Assistance'\n  ];\n\n  const allowedInterest = ['Low', 'Medium', 'High'];\n\n  if (\n    !result.reply_message ||\n    !allowedIntents.includes(result.customer_intent) ||\n    !allowedInterest.includes(result.interest_level) ||\n    typeof result.handoff_required !== 'boolean'\n  ) {\n    throw new Error('Incomplete AI response');\n  }\n\n  return {\n    json: {\n      ...result,\n      ai_output_valid: true,\n      handoff_reason: result.handoff_reason || ''\n    }\n  };\n\n} catch (error) {\n  return {\n    json: {\n      reply_message: '',\n      customer_intent: 'Needs Human Assistance',\n      interest_level: 'Low',\n      handoff_required: true,\n      handoff_reason: 'AI response could not be validated: ' + error.message,\n      ai_output_valid: false\n    }\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        272
+      ],
+      "id": "f91bb528-c84f-4b3b-9998-e2be8a34b52c",
+      "name": "Classify Customer Intent"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "1ee397b8-c524-40ac-8463-b25cd690cad4",
+              "leftValue": "={{ $json.handoff_required }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        704,
+        160
+      ],
+      "id": "725809c0-73a2-410c-bb18-9d0b187ee758",
+      "name": "Human Handoff Check"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "\nconst data = $input.item.json;\nconst incoming = $('Validate Incoming Message').item.json;\n\nreturn {\n  json: {\n    ...data,\n    sender_id: incoming.sender_id,\n    message_id: incoming.message_id,\n    recipient_id: incoming.recipient_id,\n    business_account_id: incoming.business_account_id,\n\n    handoff_status: 'Assigned',\n    handoff_required: true,\n\n    handoff_summary: data.reply_message || 'Customer requires human assistance.',\n\n    handoff_notification: {\n      customer_id: incoming.sender_id,\n      reason: data.handoff_reason || 'Human assistance requested',\n      customer_intent: data.customer_intent || 'Needs Human Assistance',\n      status: 'Assigned'\n    },\n\n    ai_reply_stopped: true\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "id": "fa516359-59b8-46cb-af7d-ea3e1e7bd7ce",
+      "name": "Prepare Human Handoff"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ai = $input.item.json;\nconst incoming = $('Validate Incoming Message').item.json;\n\nconst customerId = incoming.sender_id;\nconst reply = ai.reply_message;\n\nif (!customerId || !reply) {\n  throw new Error('Missing customer ID or AI reply');\n}\n\nreturn {\n  json: {\n    sender_id: customerId,\n    recipient_id: incoming.recipient_id,\n    business_account_id: incoming.business_account_id,\n    message_id: incoming.message_id,\n\n    reply_message: reply,\n    customer_intent: ai.customer_intent,\n    interest_level: ai.interest_level,\n\n    instagram_request_body: {\n      recipient: {\n        id: customerId\n      },\n      message: {\n        text: reply\n      }\n    },\n\n    reply_status: 'Prepared',\n    send_enabled: false\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        320
+      ],
+      "id": "1743eba4-1ec3-4656-b3b4-6de02796f3ba",
+      "name": "Prepare Instagram Reply"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.instagram_request_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        976,
+        464
+      ],
+      "id": "be46e3a7-3d78-486d-970b-43910cea5fdb",
+      "name": "Instagram API Request (Disabled for Testing)",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const data = $input.item.json;\n\nconst statusCode = data.statusCode || data.status || null;\nconst apiResponse = data.body || data;\n\nconst isMock = data.mock_response === true || data.send_enabled === false;\n\nlet apiStatus = 'Unknown';\nlet errorMessage = '';\n\nif (isMock && statusCode >= 200 && statusCode < 300) {\n  apiStatus = 'Mock Success';\n} else if (isMock && statusCode !== null) {\n  apiStatus = 'Failed';\n  errorMessage = apiResponse.message || 'Mock Instagram API failure';\n} else if (statusCode >= 200 && statusCode < 300) {\n  apiStatus = 'Accepted';\n} else if (statusCode !== null) {\n  apiStatus = 'Failed';\n  errorMessage = apiResponse.message || 'Instagram API request failed';\n}\n\nreturn {\n  json: {\n    ...data,\n    api_status: apiStatus,\n    api_response: apiResponse,\n    api_error: errorMessage,\n    message_sent: !isMock && apiStatus === 'Accepted'\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        368
+      ],
+      "id": "93ae821c-d877-40ab-8908-f447d71c06a1",
+      "name": "Handle Instagram API Response"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "KRWs2JE4Sh2efrs6",
+          "mode": "list",
+          "cachedResultName": "instagram_conversation_memory",
+          "cachedResultUrl": "/projects/EIbc0hbWjyNzhCTf/datatables/KRWs2JE4Sh2efrs6"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "sender_id",
+              "keyValue": "={{ $('Validate Incoming Message').item.json.sender_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sender_id": "={{ $('Validate Incoming Message').item.json.sender_id }}",
+            "conversation_history": "={{ [   $('Retrieve Conversation Memory').item.json.conversation_history || '',   'Customer: ' + $('Validate Incoming Message').item.json.message_text,   'Handoff: ' + $('Prepare Human Handoff').item.json.handoff_reason ].filter(Boolean).join('\\n').split('\\n').slice(-20).join('\\n') }}",
+            "customer_intent": "={{ $('Prepare Human Handoff').item.json.customer_intent }}",
+            "interest_level": "={{ $('Prepare Human Handoff').item.json.interest_level }}",
+            "handoff_status": "Assigned"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sender_id",
+              "displayName": "sender_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "conversation_history",
+              "displayName": "conversation_history",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "interest_level",
+              "displayName": "interest_level",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "handoff_status",
+              "displayName": "handoff_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1104,
+        32
+      ],
+      "id": "0def929b-632b-4f8b-b0f7-7060436f7523",
+      "name": "Save Human Handoff State"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "KRWs2JE4Sh2efrs6",
+          "mode": "list",
+          "cachedResultName": "instagram_conversation_memory",
+          "cachedResultUrl": "/projects/EIbc0hbWjyNzhCTf/datatables/KRWs2JE4Sh2efrs6"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "sender_id",
+              "keyValue": "={{ $('Validate Incoming Message').item.json.sender_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "sender_id": "={{ $('Validate Incoming Message').item.json.sender_id }}",
+            "conversation_history": "={{ [\n  $('Retrieve Conversation Memory').item.json.conversation_history || '',\n  'Customer: ' + $('Validate Incoming Message').item.json.message_text,\n  $('Handle Instagram API Response').item.json.message_sent\n    ? 'Assistant: ' + $('Classify Customer Intent').item.json.reply_message\n    : 'Assistant reply not delivered. Status: ' + ($('Handle Instagram API Response').item.json.api_status || 'Unknown')\n].filter(Boolean).join('\\n').split('\\n').slice(-20).join('\\n') }}",
+            "customer_intent": "={{ $('Classify Customer Intent').item.json.customer_intent }}",
+            "interest_level": "={{ $('Classify Customer Intent').item.json.interest_level }}",
+            "handoff_status": "Not Assigned"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "sender_id",
+              "displayName": "sender_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "conversation_history",
+              "displayName": "conversation_history",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "customer_intent",
+              "displayName": "customer_intent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "interest_level",
+              "displayName": "interest_level",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "handoff_status",
+              "displayName": "handoff_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1632,
+        416
+      ],
+      "id": "d5b065e2-3d0d-483f-a653-bfce1022d8d2",
+      "name": "Save Conversation State"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "dbbf5e81-cf7d-4f69-802d-34a19689e5bf",
+              "leftValue": "={{ $json.handoff_status || 'Not Assigned' }}",
+              "rightValue": "Assigned",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        144,
+        128
+      ],
+      "id": "a66defa3-9473-429e-88d2-4df62bd8672b",
+      "name": "Check Existing Human Handoff"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "N6GfwohkJi9MnsdJ",
+          "mode": "list",
+          "cachedResultName": "instagram_processed_messages",
+          "cachedResultUrl": "/projects/EIbc0hbWjyNzhCTf/datatables/N6GfwohkJi9MnsdJ"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "keyValue": "={{ $('Validate Incoming Message').item.json.message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "processing_status": "={{ ['Accepted', 'Mock Success'].includes($json.api_status) ? 'Completed' : $json.api_status === 'Failed' ? 'Failed' : 'Pending' }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sender_id",
+              "displayName": "sender_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1392,
+        336
+      ],
+      "id": "ee07d5ee-c69c-42cd-b5be-55c632936edc",
+      "name": "Update row(s)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Change to 'success' or 'failure' when testing.\nconst MOCK_OUTCOME = 'success';\n\nreturn items.map(item => {\n  const data = item.json;\n\n  if (MOCK_OUTCOME === 'success') {\n    return {\n      json: {\n        ...data,\n        mock_response: true,\n        statusCode: 200,\n        body: {\n          success: true,\n          message: 'Mock Instagram API success',\n          recipient_id: data.sender_id\n        }\n      }\n    };\n  }\n\n  return {\n    json: {\n      ...data,\n      mock_response: true,\n      statusCode: 500,\n      body: {\n        success: false,\n        message: 'Mock Instagram API failure'\n      }\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        624
+      ],
+      "id": "660e90af-0dec-4bcf-a559-83cf5a85fe70",
+      "name": "Mock Instagram API Response"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "N6GfwohkJi9MnsdJ",
+          "mode": "list",
+          "cachedResultName": "instagram_processed_messages",
+          "cachedResultUrl": "/projects/EIbc0hbWjyNzhCTf/datatables/N6GfwohkJi9MnsdJ"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "keyValue": "={{ $('Validate Incoming Message').item.json.message_id }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -592,
+        48
+      ],
+      "id": "45fb40bb-0578-4532-8bf1-0c19e3a751d2",
+      "name": "Get row(s)",
+      "alwaysOutputData": true,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9caf2e3b-18b3-4537-82f5-7d73941e9e79",
+              "leftValue": "={{ $json.id?.toString() || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -432,
+        160
+      ],
+      "id": "be211788-5995-4e02-b9a4-756a7a5d454a",
+      "name": "If"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        16
+      ],
+      "id": "9376b104-7526-4b06-a34c-910c04242c3d",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "038a2076-1d6c-41cd-9520-79e9da5eece4",
+              "leftValue": "={{ $json.processing_status }}",
+              "rightValue": "Failed",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -240,
+        -64
+      ],
+      "id": "e7901a17-c6b3-4d9b-bcb4-56ca8155c7e6",
+      "name": "Check Failed Message"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "N6GfwohkJi9MnsdJ",
+          "mode": "list",
+          "cachedResultName": "instagram_processed_messages",
+          "cachedResultUrl": "/projects/EIbc0hbWjyNzhCTf/datatables/N6GfwohkJi9MnsdJ"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "keyValue": "={{ $('Validate Incoming Message').item.json.message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "processing_status": "Pending",
+            "processed_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sender_id",
+              "displayName": "sender_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        32,
+        -192
+      ],
+      "id": "40820743-8009-4bc9-bbc6-4584fde32ecb",
+      "name": "Reset Failed Message to Pending"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "value": "N6GfwohkJi9MnsdJ",
+          "mode": "list",
+          "cachedResultName": "instagram_processed_messages",
+          "cachedResultUrl": "/projects/EIbc0hbWjyNzhCTf/datatables/N6GfwohkJi9MnsdJ"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "message_id",
+              "keyValue": "={{ $('Validate Incoming Message').item.json.message_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "processing_status": "Handed Off",
+            "processed_at": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "sender_id",
+              "displayName": "sender_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "processing_status",
+              "displayName": "processing_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1328,
+        32
+      ],
+      "id": "fba12240-fa36-4661-885e-45b3f6e24fab",
+      "name": "Update row(s)1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "28452bd8-127b-4ab1-a859-539fd9e2c9eb",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -752,
+        240
+      ],
+      "id": "ca351ea3-4351-46b4-922c-cc121a917924",
+      "name": "If1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Incoming Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Incoming Message": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If row does not exist": {
+      "main": [
+        [
+          {
+            "node": "Insert row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert row": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Conversation Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Conversation Memory": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Human Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Classify Customer Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Customer Intent": {
+      "main": [
+        [
+          {
+            "node": "Human Handoff Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Human Handoff Check": {
+      "main": [
+        [
+          {
+            "node": "Prepare Human Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Instagram Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Instagram Reply": {
+      "main": [
+        [
+          {
+            "node": "Instagram API Request (Disabled for Testing)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram API Request (Disabled for Testing)": {
+      "main": [
+        [
+          {
+            "node": "Mock Instagram API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Instagram API Response": {
+      "main": [
+        [
+          {
+            "node": "Update row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Human Handoff": {
+      "main": [
+        [
+          {
+            "node": "Save Human Handoff State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing Human Handoff": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update row(s)": {
+      "main": [
+        [
+          {
+            "node": "Save Conversation State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Instagram API Response": {
+      "main": [
+        [
+          {
+            "node": "Handle Instagram API Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s)": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Check Failed Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If row does not exist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Operation, do nothing": {
+      "main": [
+        []
+      ]
+    },
+    "Check Failed Message": {
+      "main": [
+        [
+          {
+            "node": "Reset Failed Message to Pending",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reset Failed Message to Pending": {
+      "main": [
+        [
+          {
+            "node": "Retrieve Conversation Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Human Handoff State": {
+      "main": [
+        [
+          {
+            "node": "Update row(s)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Get row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "989cbb9b-9c69-4742-a81c-73351fbea64c",
+  "meta": {
+    "instanceId": "eb689872d6e9c98b0be08d4b1136dbe6749ca4eb2357a75e18eafe901d094fff"
+  },
+  "nodeGroups": [],
+  "id": "SGWxlyr9zI0wZ3Ze",
+  "tags": []
+}
